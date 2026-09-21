@@ -484,53 +484,52 @@ int CPU_Calc_Flux(double *flux, double *interface_p,
 
 	if (vacuum == 0 ) {
 	    if (pstar > QL_p) {
-		//   Back out values using the shock relations.
-		//   Density -- from the Rankine-Hugoniot relations 
-		
-		rhoLstar = QL_rho*
-		    (gp1*pstar+gm1*QL_p)/
-		    (gp1*QL_p+gm1*pstar);
-		
-		//    Specific energy -- from the Equation of state 
-		eLstar = pstar/(gm1*rhoLstar);
-		
-		//    Local speed of sound -- Perfect gas version.
-		aLstar = sqrt(geff*gm1*eLstar);
+			//   Back out values using the shock relations.
+			//   Density -- from the Rankine-Hugoniot relations 
+			
+			rhoLstar = QL_rho*
+				(gp1*pstar+gm1*QL_p)/
+				(gp1*QL_p+gm1*pstar);
+			
+			//    Specific energy -- from the Equation of state 
+			eLstar = pstar/(gm1*rhoLstar);
+			
+			//    Local speed of sound -- Perfect gas version.
+			aLstar = sqrt(geff*gm1*eLstar);
 	    } else {
-		
-		//        Use the isentropic-wave relations. 
-		//        Local speed of sound -- Riemann invariants. 
-		aLstar = (uLbar-ustar)*0.5*gm1;
-		
-		//        Specific energy -- sound speed 
-		eLstar = aLstar*aLstar/(geff*gm1);
-		
-		//       Density -- equation of state
-		rhoLstar = pstar/(gm1*eLstar);
+			//        Use the isentropic-wave relations. 
+			//        Local speed of sound -- Riemann invariants. 
+			aLstar = (uLbar-ustar)*0.5*gm1;
+			
+			//        Specific energy -- sound speed 
+			eLstar = aLstar*aLstar/(geff*gm1);
+			
+			//       Density -- equation of state
+			rhoLstar = pstar/(gm1*eLstar);
 	    }
 	    if (pstar > QR_p) {
-		//           Back out values using the shock relations.
-		//           Density -- from the Rankine-Hugoniot relations 
-		rhoRstar = QR_rho*
-		    (gp1*pstar+gm1*QR_p)/
-		    (gp1*QR_p+gm1*pstar);
-		
-		//           Specific energy -- from the Equation of state 
-		eRstar = pstar/(gm1*rhoRstar);
-		
-		//           Local speed of sound -- Perfect gas version. 
-		aRstar = sqrt(geff*gm1*eRstar);
-	    } else {
-		
-		//           Use the isentropic-wave relations. 
-		//           Local speed of sound -- Riemann invariants. 
-		aRstar = (ustar-uRbar)*0.5*gm1;
-		
-		//           Specific energy -- sound speed
-		eRstar = aRstar*aRstar/(geff*gm1);
-		
-		//           Density -- equation of state
-		rhoRstar = pstar/(gm1*eRstar);
+			//           Back out values using the shock relations.
+			//           Density -- from the Rankine-Hugoniot relations 
+			rhoRstar = QR_rho*
+				(gp1*pstar+gm1*QR_p)/
+				(gp1*QR_p+gm1*pstar);
+			
+			//           Specific energy -- from the Equation of state 
+			eRstar = pstar/(gm1*rhoRstar);
+			
+			//           Local speed of sound -- Perfect gas version. 
+			aRstar = sqrt(geff*gm1*eRstar);
+			} else {
+			
+			//           Use the isentropic-wave relations. 
+			//           Local speed of sound -- Riemann invariants. 
+			aRstar = (ustar-uRbar)*0.5*gm1;
+			
+			//           Specific energy -- sound speed
+			eRstar = aRstar*aRstar/(geff*gm1);
+			
+			//           Density -- equation of state
+			rhoRstar = pstar/(gm1*eRstar);
 	    }
 	    
 	    //    Temperatures -- equation of state also.
@@ -550,7 +549,6 @@ int CPU_Calc_Flux(double *flux, double *interface_p,
 	    //     Left wave is an expansion fan.
 	    wspeedL = QL_u - QL_a;
 	}
-	//getch();
 	if ((pstar > QR_p) && (vacuum == 0)) {
 	    //     Right wave is a shock. 
 	    temporary = 0.5*gp1*QR_p/QR_rho*(pstar/QR_p+gm1/gp1);
@@ -559,8 +557,6 @@ int CPU_Calc_Flux(double *flux, double *interface_p,
 	    //    Right wave is an expansion fan. 
 	    wspeedR = QR_u + QR_a;
 	}
-	//getch();
-
 	//     ************************************
 	//     Decide which way the waves are going. 
 	//     ************************************
