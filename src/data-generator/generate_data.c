@@ -9,7 +9,7 @@
 
 #include "riemann.h"
 
-#define DEBUG 0
+#define DEBUG 1
 
 // Thermodynamic constants
 #define GAMMA 1.4
@@ -57,7 +57,8 @@ int main() {
         // Compute the flux at this interface
         double flux[5]; // The solver is a 3D solver, though we'll only use 1D here
         double interface_p[5];
-        CPU_Calc_Flux(flux, interface_p,
+        int riemann_type;
+        riemann_type = CPU_Calc_Flux(flux, interface_p,
             QL_rho, QL_vx, 0.0, 0.0, QL_cRT,
             QR_rho, QR_vx, 0.0, 0.0, QR_cRT, R, GAMMA,
             nx, ny, nz,
@@ -67,7 +68,7 @@ int main() {
         if (DEBUG) printf("  Left state: rho = %g, vx = %g, T = %g\n", QL_rho, QL_vx, (QL_cRT * QL_cRT) / R);
         if (DEBUG) printf("  Right state: rho = %g, vx = %g, T = %g\n", QR_rho, QR_vx, (QR_cRT * QR_cRT) / R);
         if (DEBUG) printf("  Computed fluxes: mass = %g, mom = %g, energy = %g\n", flux[0], flux[1], flux[4]);
-
+        if (DEBUG) printf("  Type: %d\n", riemann_type);
         // Now to compute the characteristic speeds for verification
         double FLUXES_L[3];
         double FLUXES_R[3];
@@ -103,11 +104,6 @@ int main() {
         FM[1] = -FLUXES_R[1]*Z3;
         FM[2] = -FLUXES_R[2]*Z3;
 
-        // double FLUX_DIFF[3];
-        //FLUX_DIFF[0] = flux[0] - (0.5*(FLUXES_L[0]+FLUXES_R[0]) + 0.5*QL_Mach*FLUXES_L[0] - 0.5*QR_Mach*FLUXES_R[0]);
-        //FLUX_DIFF[1] = flux[1] - (0.5*(FLUXES_L[1]+FLUXES_R[1]) + 0.5*QL_Mach*FLUXES_L[1] - 0.5*QR_Mach*FLUXES_R[1]);
-        //FLUX_DIFF[2] = flux[4] - (0.5*(FLUXES_L[2]+FLUXES_R[2]) + 0.5*QL_Mach*FLUXES_L[2] - 0.5*QR_Mach*FLUXES_R[2]);
-
         // Compute the flux difference between the riemann flux and the SHLL flux (Without the dissipation term)
         double FLUX_DIFF[3];
         FLUX_DIFF[0] = flux[0] - (FP[0] + FM[0]);
@@ -117,9 +113,6 @@ int main() {
 
         // Now to compute the speed
         double SPEEDS[3];
-        //SPEEDS[0] = FLUX_DIFF[0] / (0.5*((1.0-QR_Mach*QR_Mach)*U_R[0] - (1.0-QL_Mach*QL_Mach)*U_L[0]));
-        //SPEEDS[1] = FLUX_DIFF[1] / (0.5*((1.0-QR_Mach*QR_Mach)*U_R[1] - (1.0-QL_Mach*QL_Mach)*U_L[1]));
-        //SPEEDS[2] = FLUX_DIFF[2] / (0.5*((1.0-QR_Mach*QR_Mach)*U_R[2] - (1.0-QL_Mach*QL_Mach)*U_L[2]));
         SPEEDS[0] = FLUX_DIFF[0] / (0.5*(U_R[0] - U_L[0]));
         SPEEDS[1] = FLUX_DIFF[1] / (0.5*(U_R[1] - U_L[1]));
         SPEEDS[2] = FLUX_DIFF[2] / (0.5*(U_R[2] - U_L[2]));
@@ -128,9 +121,6 @@ int main() {
 
         // Now try to compute the final fluxes using these speeds as a test
         double FLUX_TEST[3];
-        //FLUX_TEST[0] = FP[0] + FM[0] + SPEEDS[0]*(0.5*((1.0-QR_Mach*QR_Mach)*U_R[0] - (1.0-QL_Mach*QL_Mach)*U_L[0]));
-        //FLUX_TEST[1] = FP[1] + FM[1] + SPEEDS[1]*(0.5*((1.0-QR_Mach*QR_Mach)*U_R[1] - (1.0-QL_Mach*QL_Mach)*U_L[1]));
-        //FLUX_TEST[2] = FP[2] + FM[2] + SPEEDS[2]*(0.5*((1.0-QR_Mach*QR_Mach)*U_R[2] - (1.0-QL_Mach*QL_Mach)*U_L[2]));
         FLUX_TEST[0] = FP[0] + FM[0] + SPEEDS[0]*(0.5*(U_R[0] - U_L[0]));
         FLUX_TEST[1] = FP[1] + FM[1] + SPEEDS[1]*(0.5*(U_R[1] - U_L[1]));
         FLUX_TEST[2] = FP[2] + FM[2] + SPEEDS[2]*(0.5*(U_R[2] - U_L[2]));
@@ -139,10 +129,10 @@ int main() {
         if (DEBUG) printf("------------------------------------------------------\n");
 
         // Now to write to file
-        fprintf(fp, "%e,%e,%e,%e,%e,%e,%e,%e,%e\n", 
+        fprintf(fp, "%e,%e,%e,%e,%e,%e,%e,%e,%e,%d\n", 
             QL_rho, QL_vx, QL_cRT,
             QR_rho, QR_vx, QR_cRT,
-            SPEEDS[0], SPEEDS[1], SPEEDS[2]); // Another nasty ass bug, OMG
+            SPEEDS[0], SPEEDS[1], SPEEDS[2], riemann_type); // Another nasty ass bug, OMG
 
     }
     fclose(fp);

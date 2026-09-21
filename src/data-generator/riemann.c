@@ -31,13 +31,13 @@ double CPU_Compute_Max_CFL(double *p0, double *p1, double *p2, float DX, float D
 
 
 
-void CPU_Calc_Flux(double *flux, double *interface_p,
+int CPU_Calc_Flux(double *flux, double *interface_p,
     double QL_rho, double QL_ux, double QL_vy, double QL_vz, double QL_cRT,
     double QR_rho, double QR_ux, double QR_vy, double QR_vz, double QR_cRT, double R, double GAMMA,
     double nx, double ny, double nz,
     double px, double py, double pz,
     double qx, double qy, double qz, int wall_flag) {
-	
+
 	// -------- Comments by Peter Jacobs & Matthew Smith -----------------------------
 	//  (i) put into the implosion (rectefm) prgram. FORTRAN90 version, June 2005
 	//  (ii) Modified for use in MOCVD simulations in January 2013.
@@ -113,6 +113,7 @@ void CPU_Calc_Flux(double *flux, double *interface_p,
 	//     flxeng  : flux of energy
 
 	// DECLARE CONSTANTS
+	int riemann_type = -1; // This is what we'll return, an integer describing the case.
 	double QL_u, QL_v, QL_w, QR_u, QR_v, QR_w;
 	double QR_RT, QL_RT, QR_T, QL_T, QR_E, QL_E, QR_p, QL_p, QR_a, QL_a, QL_e, QR_e;
 	double sqrR, sqrL, gm1, gp1, base,expon,pwr,z;
@@ -188,6 +189,7 @@ void CPU_Calc_Flux(double *flux, double *interface_p,
 	    // We have a situation in which a (near) vacuum is formed
 	    //  between the left and right states.
 	    vacuum = 1; // A near vacuum is present
+		riemann_type = 1;
 	    ustar = 0.0;
 	    pstar = PMIN; 
 	    eLstar = EMIN;
@@ -206,6 +208,7 @@ void CPU_Calc_Flux(double *flux, double *interface_p,
 	    expon = 2.0*geff/gm1;
 	    pwr = pow(base,expon);
 	    pstar = QL_p*pwr;
+		riemann_type = 2;
 	}
 
 	//     ------------------------------------
@@ -214,260 +217,263 @@ void CPU_Calc_Flux(double *flux, double *interface_p,
 
 	if (vacuum == 0)  {
 	    if ((pstar > (BIGRAT*QL_p)) && (pstar > (BIGRAT*QR_p))) {
-		// Analytical solution to strong shock using shock relations
-		// if both of the pressure jumps are large enough.
-		// Take 4 Newton steps to get accurate estimates of pstar and ustar
-		// --- Iteration 1 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p+gm1/(2.0*geff)); // check later
-		term2 = sqrt(gp1/(2.0 * geff)*pstar/QR_p+gm1/(2.0*geff));
-		F = QL_u-QL_a/geff*(pstar/QL_p-1.0)/term1- QR_u- QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    * ( pstar / QL_p + (3.0 * geff - 1.0) / gp1 ) 
-		    / (term1 * term1 * term1)
-		    - gp1 * QR_a / (4.0 * geff * geff * QR_p)
-		    * ( pstar / QR_p + (3.0 * geff - 1.0) / gp1 )
-		    / (term2 * term2 * term2);
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		
-		//       --- Iteration 2 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p 
-		    + gm1/(2.0*geff));
-		term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
-		    + gm1/(2.0*geff));
-		F = QL_u
-		    - QL_a/geff*(pstar/QL_p-1.0)/term1
-		    - QR_u
-		    - QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    *(pstar/QL_p+(3.0*geff-1.0)/gp1)
-		    /(term1*term1*term1)
-		    - gp1*QR_a/(4.0*geff*geff*QR_p)
-		    *(pstar/QR_p+(3.0*geff-1.0)/gp1)
-		    /(term2*term2*term2);
-		pstar = pstar - F/dFdpstar;
-		if (pstar < PMIN) {
-		    pstar = PMIN;
-		}
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//        --- Iteration 3 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p 
-		    + gm1/(2.0*geff));
-		term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
-		    + gm1/(2.0*geff));
-		F = QL_u
-		    - QL_a/geff*(pstar/QL_p-1.0)/term1
-		    - QR_u
-		    - QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    *(pstar/QL_p+(3.0*geff-1.0)/gp1)
-		    /(term1*term1*term1)
-		    - gp1*QR_a/(4.0*geff*geff*QR_p)
-		    *(pstar/QR_p+(3.0*geff-1.0)/gp1)
-		    /(term2*term2*term2);
-		pstar = pstar - F/dFdpstar;
-		if (pstar < PMIN) {
-		    pstar = PMIN;
-		}
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1 * pstar;
-		}
-		//           --- Iteration 4 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p 
-		    + gm1/(2.0*geff));
-		term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
-		    + gm1/(2.0*geff));
-		F = QL_u
-		    - QL_a/geff*(pstar/QL_p-1.0)/term1
-		    - QR_u
-		    - QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    *(pstar/QL_p+(3.0*geff-1.0)/gp1)
-		    /(term1*term1*term1)
-		    - gp1*QR_a/(4.0*geff*geff*QR_p)
-		    *(pstar/QR_p+(3.0*geff-1.0)/gp1)
-		    /(term2*term2*term2);
-		pstar = pstar - F/dFdpstar;
-		if (pstar < PMIN) {
-		    pstar = PMIN;
-		}
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		
-		//       --- Calculate Velocity ---
-		ustar = QL_u-QL_a/geff*(pstar/QL_p-1.0)/term1;
-	    } else if (pstar > (BIGRAT*QR_p)) { 
-		//           Treat the right-moving wave as a shock, the
-		//           left-moving wave as an isentropic wave, and take
-		//           four Newton steps to improve the guess for pstar, ustar.
-		//           --- Iteration 1 ---
-		term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
-		term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p + gm1/(2.0*geff));
-		F = QL_u
-		    - 2.0*QL_a/gm1*(term1-1.0)
-		    - QR_u
-		    - QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -QL_a/(geff*pstar)*term1
-		    - gp1*QR_a/(4.0*geff*geff*QR_p)
-		    *(pstar/QR_p+(3.0*geff-1.0)/gp1)
-		    /(term2*term2*term2);
-		delp = F / dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//           --- Iteration 2 ---
-		term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
-		term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
-		    + gm1/(2.0*geff));
-		F = QL_u
-		    - 2.0*QL_a/gm1*(term1-1.0)
-		    - QR_u
-		    - QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -QL_a/(geff*pstar)*term1
-		    - gp1*QR_a/(4.0*geff*geff*QR_p)
-		    *(pstar/QR_p+(3.0*geff-1.0)/gp1)
-		    /(term2*term2*term2);
-		delp = F / dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//          --- Iteration 3 ---
-		term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
-		term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
-		    + gm1/(2.0*geff));
-		F = QL_u
-		    - 2.0*QL_a/gm1*(term1-1.0)
-		    - QR_u
-		    - QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -QL_a/(geff*pstar)*term1
-		    - gp1*QR_a/(4.0*geff*geff*QR_p)
-		    *(pstar/QR_p+(3.0*geff-1.0)/gp1)
-		    /(term2*term2*term2);
-		delp = F / dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//           --- Iteration 4 ---
-		term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
-		term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
-		    + gm1/(2.0*geff));
-		F = QL_u
-		    - 2.0*QL_a/gm1*(term1-1.0)
-		    - QR_u
-		    - QR_a/geff*(pstar/QR_p-1.0)/term2;
-		dFdpstar = -QL_a/(geff*pstar)*term1
-		    - gp1*QR_a/(4.0*geff*geff*QR_p)
-		    *(pstar/QR_p+(3.0*geff-1.0)/gp1)
-		    /(term2*term2*term2);
-		delp = F / dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//           --- Velocity ---
-		ustar = QR_u + QR_a/geff*(pstar/QR_p-1.0)/term2;
+			riemann_type = 3;	
+			// Analytical solution to strong shock using shock relations
+			// if both of the pressure jumps are large enough.
+			// Take 4 Newton steps to get accurate estimates of pstar and ustar
+			// --- Iteration 1 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p+gm1/(2.0*geff)); // check later
+			term2 = sqrt(gp1/(2.0 * geff)*pstar/QR_p+gm1/(2.0*geff));
+			F = QL_u-QL_a/geff*(pstar/QL_p-1.0)/term1- QR_u- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				* ( pstar / QL_p + (3.0 * geff - 1.0) / gp1 ) 
+				/ (term1 * term1 * term1)
+				- gp1 * QR_a / (4.0 * geff * geff * QR_p)
+				* ( pstar / QR_p + (3.0 * geff - 1.0) / gp1 )
+				/ (term2 * term2 * term2);
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			
+			//       --- Iteration 2 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p 
+				+ gm1/(2.0*geff));
+			term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
+				+ gm1/(2.0*geff));
+			F = QL_u
+				- QL_a/geff*(pstar/QL_p-1.0)/term1
+				- QR_u
+				- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				*(pstar/QL_p+(3.0*geff-1.0)/gp1)
+				/(term1*term1*term1)
+				- gp1*QR_a/(4.0*geff*geff*QR_p)
+				*(pstar/QR_p+(3.0*geff-1.0)/gp1)
+				/(term2*term2*term2);
+			pstar = pstar - F/dFdpstar;
+			if (pstar < PMIN) {
+				pstar = PMIN;
+			}
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//        --- Iteration 3 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p 
+				+ gm1/(2.0*geff));
+			term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
+				+ gm1/(2.0*geff));
+			F = QL_u
+				- QL_a/geff*(pstar/QL_p-1.0)/term1
+				- QR_u
+				- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				*(pstar/QL_p+(3.0*geff-1.0)/gp1)
+				/(term1*term1*term1)
+				- gp1*QR_a/(4.0*geff*geff*QR_p)
+				*(pstar/QR_p+(3.0*geff-1.0)/gp1)
+				/(term2*term2*term2);
+			pstar = pstar - F/dFdpstar;
+			if (pstar < PMIN) {
+				pstar = PMIN;
+			}
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1 * pstar;
+			}
+			//           --- Iteration 4 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p 
+				+ gm1/(2.0*geff));
+			term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
+				+ gm1/(2.0*geff));
+			F = QL_u
+				- QL_a/geff*(pstar/QL_p-1.0)/term1
+				- QR_u
+				- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				*(pstar/QL_p+(3.0*geff-1.0)/gp1)
+				/(term1*term1*term1)
+				- gp1*QR_a/(4.0*geff*geff*QR_p)
+				*(pstar/QR_p+(3.0*geff-1.0)/gp1)
+				/(term2*term2*term2);
+			pstar = pstar - F/dFdpstar;
+			if (pstar < PMIN) {
+				pstar = PMIN;
+			}
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			
+			//       --- Calculate Velocity ---
+			ustar = QL_u-QL_a/geff*(pstar/QL_p-1.0)/term1;
+	    } else if (pstar > (BIGRAT*QR_p)) {
+			riemann_type = 4; 
+			//           Treat the right-moving wave as a shock, the
+			//           left-moving wave as an isentropic wave, and take
+			//           four Newton steps to improve the guess for pstar, ustar.
+			//           --- Iteration 1 ---
+			term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
+			term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p + gm1/(2.0*geff));
+			F = QL_u
+				- 2.0*QL_a/gm1*(term1-1.0)
+				- QR_u
+				- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -QL_a/(geff*pstar)*term1
+				- gp1*QR_a/(4.0*geff*geff*QR_p)
+				*(pstar/QR_p+(3.0*geff-1.0)/gp1)
+				/(term2*term2*term2);
+			delp = F / dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//           --- Iteration 2 ---
+			term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
+			term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
+				+ gm1/(2.0*geff));
+			F = QL_u
+				- 2.0*QL_a/gm1*(term1-1.0)
+				- QR_u
+				- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -QL_a/(geff*pstar)*term1
+				- gp1*QR_a/(4.0*geff*geff*QR_p)
+				*(pstar/QR_p+(3.0*geff-1.0)/gp1)
+				/(term2*term2*term2);
+			delp = F / dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//          --- Iteration 3 ---
+			term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
+			term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
+				+ gm1/(2.0*geff));
+			F = QL_u
+				- 2.0*QL_a/gm1*(term1-1.0)
+				- QR_u
+				- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -QL_a/(geff*pstar)*term1
+				- gp1*QR_a/(4.0*geff*geff*QR_p)
+				*(pstar/QR_p+(3.0*geff-1.0)/gp1)
+				/(term2*term2*term2);
+			delp = F / dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//           --- Iteration 4 ---
+			term1 = pow((pstar/QL_p),(gm1/(2.0*geff)));
+			term2 = sqrt(gp1/(2.0*geff)*pstar/QR_p
+				+ gm1/(2.0*geff));
+			F = QL_u
+				- 2.0*QL_a/gm1*(term1-1.0)
+				- QR_u
+				- QR_a/geff*(pstar/QR_p-1.0)/term2;
+			dFdpstar = -QL_a/(geff*pstar)*term1
+				- gp1*QR_a/(4.0*geff*geff*QR_p)
+				*(pstar/QR_p+(3.0*geff-1.0)/gp1)
+				/(term2*term2*term2);
+			delp = F / dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//           --- Velocity ---
+			ustar = QR_u + QR_a/geff*(pstar/QR_p-1.0)/term2;
 	    } else if (pstar > (BIGRAT*QL_p)) {
-		//           Treat the left-moving wave as a shock, the
-		//           right-moving wave as an isentropic wave, and take
-		//           four Newton steps to improve the guess for pstar, ustar.
-		//           --- Iteration 1 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
-		    + gm1/(2.0*geff));
-		term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
-		F = QL_u
-		    - QL_a/geff*(pstar/QL_p-1.0)/term1
-		    - QR_u
-		    - 2.0*QR_a/gm1*(term2-1.0);
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    *(pstar/QL_p+(3.0*geff-1.0)/gp1 )
-		    /(term1*term1*term1)
-		    -QR_a/(geff*pstar)*term2;
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//           --- Iteration 2 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
-		    + gm1/(2.0*geff));
-		term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
-		F = QL_u
-		    - QL_a/geff*(pstar/QL_p-1.0)/term1
-		    - QR_u
-		    - 2.0*QR_a/gm1*(term2-1.0);
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    *(pstar/QL_p+(3.0*geff-1.0)/gp1 )
-		    /(term1*term1*term1)
-		    -QR_a/(geff*pstar)*term2;
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//           --- Iteration 3 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
-		    + gm1/(2.0*geff));
-		term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
-		F = QL_u
-		    - QL_a/geff*(pstar/QL_p-1.0)/term1
-		    - QR_u
-		    - 2.0*QR_a/gm1*(term2-1.0);
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    *(pstar/QL_p+(3.0*geff-1.0)/gp1 )
-		    /(term1*term1*term1)
-		    -QR_a/(geff*pstar)*term2;
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
-		//          --- Iteration 4 ---
-		term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
-		    + gm1/(2.0*geff));
-		term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
-		F = QL_u
-		    - QL_a/geff*(pstar/QL_p-1.0)/term1
-		    - QR_u
-		    - 2.0*QR_a/gm1*(term2-1.0);
-		dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
-		    *(pstar/QL_p+(3.0*geff-1.0)/gp1 )
-		    /(term1*term1*term1)
-		    -QR_a/(geff*pstar)*term2;
-		delp = F/dFdpstar;
-		if (delp < pstar) {
-		    pstar = pstar - delp;
-		} else {
-		    pstar = 0.1*pstar;
-		}
+			riemann_type = 5;
+			//           Treat the left-moving wave as a shock, the
+			//           right-moving wave as an isentropic wave, and take
+			//           four Newton steps to improve the guess for pstar, ustar.
+			//           --- Iteration 1 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
+				+ gm1/(2.0*geff));
+			term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
+			F = QL_u
+				- QL_a/geff*(pstar/QL_p-1.0)/term1
+				- QR_u
+				- 2.0*QR_a/gm1*(term2-1.0);
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				*(pstar/QL_p+(3.0*geff-1.0)/gp1 )
+				/(term1*term1*term1)
+				-QR_a/(geff*pstar)*term2;
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//           --- Iteration 2 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
+				+ gm1/(2.0*geff));
+			term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
+			F = QL_u
+				- QL_a/geff*(pstar/QL_p-1.0)/term1
+				- QR_u
+				- 2.0*QR_a/gm1*(term2-1.0);
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				*(pstar/QL_p+(3.0*geff-1.0)/gp1 )
+				/(term1*term1*term1)
+				-QR_a/(geff*pstar)*term2;
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//           --- Iteration 3 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
+				+ gm1/(2.0*geff));
+			term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
+			F = QL_u
+				- QL_a/geff*(pstar/QL_p-1.0)/term1
+				- QR_u
+				- 2.0*QR_a/gm1*(term2-1.0);
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				*(pstar/QL_p+(3.0*geff-1.0)/gp1 )
+				/(term1*term1*term1)
+				-QR_a/(geff*pstar)*term2;
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
+			//          --- Iteration 4 ---
+			term1 = sqrt(gp1/(2.0*geff)*pstar/QL_p
+				+ gm1/(2.0*geff));
+			term2 = pow((pstar/QR_p),(gm1/(2.0*geff)));
+			F = QL_u
+				- QL_a/geff*(pstar/QL_p-1.0)/term1
+				- QR_u
+				- 2.0*QR_a/gm1*(term2-1.0);
+			dFdpstar = -gp1*QL_a/(4.0*geff*geff*QL_p)
+				*(pstar/QL_p+(3.0*geff-1.0)/gp1 )
+				/(term1*term1*term1)
+				-QR_a/(geff*pstar)*term2;
+			delp = F/dFdpstar;
+			if (delp < pstar) {
+				pstar = pstar - delp;
+			} else {
+				pstar = 0.1*pstar;
+			}
 
-		//           --- Velocity ---
-		ustar = QL_u-QL_a/geff*(pstar/QL_p-1.0)/term1;
+			//           --- Velocity ---
+			ustar = QL_u-QL_a/geff*(pstar/QL_p-1.0)/term1;
 	    }
 	}
 
@@ -757,5 +763,8 @@ void CPU_Calc_Flux(double *flux, double *interface_p,
 	interface_p[1] = QI_u;
 	interface_p[2] = QI_v;
 	interface_p[3] = QI_w;
-	interface_p[4] = QI_T;	
+	interface_p[4] = QI_T;
+	
+	// Return case
+	return riemann_type;
 }
